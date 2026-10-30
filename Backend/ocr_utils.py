@@ -1,3 +1,4 @@
+
 import os
 
 import cv2
@@ -25,16 +26,15 @@ def configure_tesseract() -> None:
 
     environment_path = os.getenv("TESSERACT_CMD")
 
-    if environment_path:
+    if environment_path and os.path.isfile(environment_path):
         pytesseract.pytesseract.tesseract_cmd = (
             environment_path
         )
-
         return
 
     if (
         os.name == "nt"
-        and os.path.exists(WINDOWS_TESSERACT_PATH)
+        and os.path.isfile(WINDOWS_TESSERACT_PATH)
     ):
         pytesseract.pytesseract.tesseract_cmd = (
             WINDOWS_TESSERACT_PATH
@@ -48,30 +48,29 @@ configure_tesseract()
 # OCR IMAGE PREPROCESSING
 # =========================
 
-def prepare_image_for_ocr(
-    image_path: str,
-):
+def prepare_image_for_ocr(image_path: str):
     """
     Prepare a document image before OCR.
 
     Steps:
-    - Load image
+    - Validate and load the image
     - Convert to grayscale
     - Upscale small images
-    - Remove light image noise
-    - Apply automatic thresholding
+    - Reduce noise
+    - Apply thresholding to improve text visibility
     """
 
-    if not os.path.exists(image_path):
+    if not os.path.isfile(image_path):
         raise FileNotFoundError(
-            "OCR image file does not exist."
+            f"OCR image file does not exist: {image_path}"
         )
 
     image = cv2.imread(image_path)
 
     if image is None:
         raise ValueError(
-            "Could not read the uploaded image."
+            "Could not read the uploaded image. "
+            "Please upload a valid JPG, JPEG, or PNG image."
         )
 
     grayscale = cv2.cvtColor(
@@ -81,7 +80,7 @@ def prepare_image_for_ocr(
 
     height, width = grayscale.shape[:2]
 
-    # Upscaling helps Tesseract with small text.
+    # Upscale small images to make text easier to recognize.
     if max(width, height) < 1600:
         grayscale = cv2.resize(
             grayscale,
@@ -91,6 +90,7 @@ def prepare_image_for_ocr(
             interpolation=cv2.INTER_CUBIC,
         )
 
+    # Reduce noise without excessively blurring text.
     denoised = cv2.fastNlMeansDenoising(
         grayscale,
         None,
@@ -99,12 +99,12 @@ def prepare_image_for_ocr(
         searchWindowSize=21,
     )
 
+    # Otsu thresholding works well for many scanned documents.
     _, processed_image = cv2.threshold(
         denoised,
         0,
         255,
-        cv2.THRESH_BINARY
-        + cv2.THRESH_OTSU,
+        cv2.THRESH_BINARY + cv2.THRESH_OTSU,
     )
 
     return processed_image
@@ -119,25 +119,24 @@ def extract_text_from_image(
     language: str = "eng",
 ) -> str:
     """
-    Extract text from a document image.
+    Extract text from a document image using Tesseract OCR.
     """
 
-    processed_image = prepare_image_for_ocr(
-        image_path
-    )
+    processed_image = prepare_image_for_ocr(image_path)
 
     try:
-        extracted_text = (
-            pytesseract.image_to_string(
-                processed_image,
-                lang=language,
-                config="--oem 3 --psm 3",
-            )
+        extracted_text = pytesseract.image_to_string(
+            processed_image,
+            lang=language,
+            config="--oem 3 --psm 3",
         )
 
     except pytesseract.TesseractNotFoundError as error:
         raise RuntimeError(
-            "Tesseract OCR could not be found."
+            "Tesseract OCR executable was not found. "
+            "Check that Tesseract is installed at "
+            f"'{WINDOWS_TESSERACT_PATH}' or set the "
+            "TESSERACT_CMD environment variable."
         ) from error
 
     except pytesseract.TesseractError as error:

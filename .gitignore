@@ -4,16 +4,27 @@ Backend/__pycache__/
 Backend/uploads/
 Backend/processed/
 *.pyc
+__pycache__/
+venv/
+.venv/
 
 # Frontend
 frontend/node_modules/
 frontend/dist/
 
-# Environment files
+# Environment files and secrets
 .env
+.env.*
+!.env.example
 frontend/.env
+frontend/.env.*
 Backend/.env
+Backend/.env.*
 
 # OS / Editor
 .DS_Store
+Thumbs.db
 .vscode/
+
+# Logs
+*.log
